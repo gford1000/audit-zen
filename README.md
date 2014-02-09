@@ -18,6 +18,7 @@ This allows a single API to answer the questions:
 - Who in organisation X has made the data changes to service Y?
 - Was the update performed directly or on-behalf-of another individual?
 - How was the data changed?
+- When was the data changed?
 
 This approach also simplifies the data storage and data processing of each of the services,
 since they only have to store a unique identifier for each change that is passed to this service.
