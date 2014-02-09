@@ -1,5 +1,8 @@
 """
 This defines the whole RESTful API that will run within flask
+
+The AWS credentials must be able to write data to the Audit service tables in AWS DynamoDB
+
 """
 import argparse
 from audit import get_tm, create_hash
@@ -218,9 +221,18 @@ def bad_routing_start(varargs = None):
 
 if __name__ == "__main__":
 
+	# Process arguments
+	parser = argparse.ArgumentParser(description='This runs the flask based web-server providing the API')
+	parser.add_argument('-d','--debug', help='Run in debug', default=False, required=False)
+	parser.add_argument('-r','--region', help='DynamoDB region', required=True)
+	parser.add_argument('-k','--access_key', help='AWS Access Key', required=True)
+	parser.add_argument('-s','--secret_key', help='AWS Secret Key', required=True)
+	parser.add_argument('-p','--prefix', help='The table prefix in DynamoDB', required=True)
+	args = parser.parse_args()
+
 	# Let's connect and make ourselves available
-	audit.set_prefix('1d786528-2c1f-41a1-afa9-bd3c411a7695')
-	audit.connect('ap-southeast-1', 'AKIAIXFYGCD7RW76NOPA', 'jZy+Hh90NWc0PfqHW1MsA93m/1+5+kY6p80PFeu6')
+	audit.set_prefix(args.prefix)
+	audit.connect(args.region, args.access_key, args.secret_key)
 
 	# Start flask
-	app.run(debug=True)
+	app.run(debug=arg.debug)
