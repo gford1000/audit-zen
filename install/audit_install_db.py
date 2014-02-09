@@ -16,7 +16,7 @@ class CreateAuditError(Exception):
 	"""Allows identification of creation specific errors"""
 	pass
 
-def create_tables(region_name, access_key, secret_key, provisioning, prefix=None):
+def create_tables(region_name, access_key, secret_key, prefix=None):
 	"""
 	Create the tables for the audit service, in the region
 	"""
@@ -46,9 +46,57 @@ def create_tables(region_name, access_key, secret_key, provisioning, prefix=None
 		idx['ProvisionedThroughput'] = create_throughput(throughput)
 		return idx
 
+	def create_table(conn, prefix, table_name, attr_def, key_def, provisioning, idx_set=[]):
+		"""Creates the table using the specified connection"""
+		gsi = []
+		for idx_def in idx_set:
+			gsi.append(create_idx(
+				idx_def['name'],
+				idx_def['schema'],
+				{'ProjectionType':'KEYS_ONLY'},
+				idx_def['provisioning']
+				))
+	
+		full_name = create_full_table_name(prefix, table_name)
+
+		if len(gsi):
+			return (full_name, conn.create_table(
+						table_name=full_name,
+						attribute_definitions= create_arg(['AttributeName', 'AttributeType'], attr_def),
+						key_schema=create_arg(['AttributeName', 'KeyType'], key_def),
+						global_secondary_indexes=gsi,
+						provisioned_throughput = create_throughput(provisioning)))
+		else:
+			return (full_name, conn.create_table(
+						table_name=full_name,
+						attribute_definitions= create_arg(['AttributeName', 'AttributeType'], attr_def),
+						key_schema=create_arg(['AttributeName', 'KeyType'], key_def),
+						provisioned_throughput = create_throughput(provisioning)))			
+
 	def create_full_table_name(prefix, table_name):
 		"""Helper to create table name"""
 		return table_name if not prefix else '_'.join((prefix, table_name))
+
+	def create_audit(conn, prefix, provisioning):
+		"""Creates the Audit table"""
+		attr_def = [('service-org_hash', 'S'), ('org-user_hash', 'S'), ('timestamp', 'N')]
+		key_def = [('service-org_hash', 'HASH'), ('timestamp', 'RANGE')]
+		idx1_schema = [('org-user_hash', 'HASH'), ('timestamp', 'RANGE')]
+		idx1 = {'name':'org-user', 'schema':idx1_schema, 'provisioning':provisioning}
+
+		return create_table(conn, prefix, 'Audit', attr_def, key_def, provisioning, [idx1])
+
+	def create_org(conn, prefix, provisioning):
+		"""Creates the Org table"""
+		attr_def = [('org_id', 'S'), ('timestamp', 'N')]
+		key_def = [('org_id', 'HASH'), ('timestamp', 'RANGE')]
+		return create_table(conn, prefix, 'Org', attr_def, key_def, provisioning)
+
+	def create_org_services(conn, prefix, provisioning):
+		"""Creates the OrgService table"""
+		attr_def = [('org-service_id', 'S'), ('timestamp', 'N')]
+		key_def = [('org-service_id', 'HASH'), ('timestamp', 'RANGE')]
+		return create_table(conn, prefix, 'OrgService', attr_def, key_def, provisioning)
 
 	def _regions():
 		"""Generator for returning dynamodb2 regions"""
@@ -58,10 +106,6 @@ def create_tables(region_name, access_key, secret_key, provisioning, prefix=None
 	# Validate region_name
 	if region_name not in _regions():
 		raise CreateAuditError('{} not a known AWS region'.format(region_name))
-
-	# Build names
-	audit_name = create_full_table_name(prefix, 'Audit')
-	ops_name = create_full_table_name(prefix, 'Ops')
 
 	# Create connection
 	region = None
@@ -77,32 +121,30 @@ def create_tables(region_name, access_key, secret_key, provisioning, prefix=None
 	except Exception as e:
 		raise CreateAuditError('Failed to connect to AWS')
 
+	resp = {}
 	try:
-		# Create table
-		key_def = [('service-org_hash', 'HASH'), ('timestamp', 'RANGE')]
-		idx1_key_def = [('org-user_hash', 'HASH'), ('timestamp', 'RANGE')]
-		attr_def = [('service-org_hash', 'S'), ('org-user_hash', 'S'), ('timestamp', 'N')]
-		result = conn.create_table(
-					table_name=audit_name,
-					attribute_definitions= create_arg(['AttributeName', 'AttributeType'], attr_def),
-					key_schema=create_arg(['AttributeName', 'KeyType'], key_def),
-					global_secondary_indexes=[
-						create_idx('org-user',
-							idx1_key_def,
-							{'ProjectionType':'KEYS_ONLY'},
-							provisioning)
-					],
-					provisioned_throughput = create_throughput(provisioning))
-	except Exception as e:
-		raise CreateAuditError('Failed to create Audit table')
+		# Create Audit table - tuple is (ReadCapacity, WriteCapacity)
+		status = create_audit(conn, prefix, (2,5))
+		resp['Audit'] = {'name':status[0], 'status':status[1]}
 
-	# Return the names of the tables created
-	return {'Audit':{'name':audit_name, 'status':result}}
+		# Create Org table
+		status = create_org(conn, prefix, (1,1))
+		resp['Org'] = {'name':status[0], 'status':status[1]}
+
+		# Create OrgService table
+		status = create_org_services(conn, prefix, (1,1))
+		resp['OrgService'] = {'name':status[0], 'status':status[1]}
+
+	except Exception as e:
+		raise CreateAuditError('Failed to create Audit table: {}'.format(e))
+
+	# Return the outcome of the request
+	return resp
 
 if __name__ == "__main__":
 	"""Creates tables using gford1000-Dev credentials"""
 	from uuid import uuid4 as uuid
 	region = 'ap-southeast-1'
-	ret = create_tables(region, 'AKIAIXFYGCD7RW76NOPA', 'jZy+Hh90NWc0PfqHW1MsA93m/1+5+kY6p80PFeu6', (2,5), str(uuid()))
+	ret = create_tables(region, 'AKIAIXFYGCD7RW76NOPA', 'jZy+Hh90NWc0PfqHW1MsA93m/1+5+kY6p80PFeu6', str(uuid()))
 
 	print ret
