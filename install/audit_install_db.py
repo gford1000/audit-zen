@@ -2,6 +2,8 @@
 This script creates an environment of the audit-zen DynamoDB tables, which comprise:
 
 	Audit table - this holds the details of the action that was performed
+	Org table - this holds the details of the organisations using this service
+	OrgService table - this holds the details of the services for which an org is using this service
 
 The tables will have an optional prefix that allows multiple installs side by side.
 
