@@ -11,6 +11,7 @@ It is expected that the AWS account used has sufficient access to create the tab
 
 """
 
+import argparse
 from boto.dynamodb2 import regions as db2_regions
 import boto.dynamodb2.layer1 as db2
 
@@ -144,9 +145,14 @@ def create_tables(region_name, access_key, secret_key, prefix=None):
 	return resp
 
 if __name__ == "__main__":
-	"""Creates tables using gford1000-Dev credentials"""
-	from uuid import uuid4 as uuid
-	region = 'ap-southeast-1'
-	ret = create_tables(region, 'AKIAIXFYGCD7RW76NOPA', 'jZy+Hh90NWc0PfqHW1MsA93m/1+5+kY6p80PFeu6', str(uuid()))
 
-	print ret
+	# Process arguments
+	parser = argparse.ArgumentParser(description='This installs the DynamoDB tables required for the Audit servce')
+	parser.add_argument('-r','--region', help='DynamoDB region', required=True)
+	parser.add_argument('-k','--access_key', help='AWS Access Key', required=True)
+	parser.add_argument('-s','--secret_key', help='AWS Secret Key', required=True)
+	args = parser.parse_args()
+
+	# Prefix with unique uuid
+	from uuid import uuid4 as uuid
+	print create_tables(args.region, args.access_key, args.secret_key, str(uuid()))
